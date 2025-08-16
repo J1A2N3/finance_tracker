@@ -1,0 +1,117 @@
+package project;
+
+import java.sql.*;
+import java.util.Scanner;
+
+public class main_class {
+    private static final String URL = "jdbc:mysql://localhost:3306/finance_tracker?useSSL=false&serverTimezone=UTC";
+    private static final String USER = "root";   
+    private static final String PASSWORD = "connect"; 
+
+    private static Connection conn;
+    private static Scanner sc = new Scanner(System.in);
+
+    public static void main(String[] args) {
+        try {
+        	Class.forName("com.mysql.cj.jdbc.Driver");
+            conn = DriverManager.getConnection(URL, USER, PASSWORD);
+            System.out.println("Connected to Database!");
+
+            while (true) {
+                System.out.println("\n--- Personal Finance Tracker ---");
+                System.out.println("1. Register User");
+                System.out.println("2. Add Transaction");
+                System.out.println("3. View Monthly Summary");
+                System.out.println("4. Check Savings Goal");
+                System.out.println("5. Exit");
+                System.out.print("Choose: ");
+                int choice = sc.nextInt();
+
+                switch (choice) {
+                    case 1 -> registerUser();
+                    case 2 -> addTransaction();
+                    case 3 -> viewMonthlySummary();
+                    case 4 -> checkSavingsGoal();
+                    case 5 -> {
+                        System.out.println("Exiting...");
+                        conn.close();
+                        return;
+                    }
+                    default -> System.out.println("Invalid choice!");
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void registerUser() throws SQLException {
+        System.out.print("Enter name: ");
+        String name = sc.next();
+        System.out.print("Enter email: ");
+        String email = sc.next();
+        System.out.print("Enter password: ");
+        String password = sc.next();
+
+        String sql = "INSERT INTO user(name, email, password) VALUES (?, ?, ?)";
+        PreparedStatement ps = conn.prepareStatement(sql);
+        ps.setString(1, name);
+        ps.setString(2, email);
+        ps.setString(3, password);
+
+        ps.executeUpdate();
+        System.out.println("User registered!");
+    }
+
+    private static void addTransaction() throws SQLException {
+        System.out.print("Enter user_id: ");
+        int uid = sc.nextInt();
+        System.out.print("Enter type (INCOME/EXPENSE): ");
+        String type = sc.next().toUpperCase();
+        System.out.print("Enter category: ");
+        String category = sc.next();
+        System.out.print("Enter amount: ");
+        double amount = sc.nextDouble();
+        
+        String sql = "INSERT INTO transactions(user_id, type, category, amount) VALUES (?, ?, ?, ?)";
+        PreparedStatement ps = conn.prepareStatement(sql);
+        ps.setInt(1, uid);
+        ps.setString(2, type);
+        ps.setString(3, category);
+        ps.setDouble(4, amount);
+        ps.executeUpdate();
+        System.out.println("Transaction added!");
+    }
+
+    private static void viewMonthlySummary() throws SQLException {
+        System.out.print("Enter user_id: ");
+        int uid = sc.nextInt();
+        String sql = "SELECT EXTRACT(MONTH FROM txn_date) AS month, SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END) AS income, SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END) AS expense, SUM(CASE WHEN type = 'INCOME' THEN amount ELSE -amount END) AS net FROM transactions WHERE user_id = ? GROUP BY EXTRACT(MONTH FROM txn_date)";
+        PreparedStatement ps = conn.prepareStatement(sql);
+        ps.setInt(1, uid);
+        ResultSet rs = ps.executeQuery();
+
+        System.out.println("Monthly Summary:");
+        while (rs.next()) {
+            System.out.printf("Month: %d | Income: %.2f | Expense: %.2f | Net: %.2f\n",
+                    rs.getInt("month"),
+                    rs.getDouble("income"),
+                    rs.getDouble("expense"),
+                    rs.getDouble("net"));
+        }
+    }
+
+    private static void checkSavingsGoal() throws SQLException {
+        System.out.print("Enter user_id: ");
+        int uid = sc.nextInt();
+        System.out.print("Enter goal amount: ");
+        double goal = sc.nextDouble();
+        CallableStatement cs = conn.prepareCall("{CALL CheckSavingsGoal(?, ?, ?)}");
+        cs.setInt(1, uid);
+        cs.setDouble(2, goal);
+        cs.registerOutParameter(3, java.sql.Types.VARCHAR);
+        cs.execute(); 
+        String result = cs.getString(3);
+        System.out.println(result);
+    }
+}
